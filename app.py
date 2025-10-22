@@ -1,41 +1,26 @@
-# app.py
 import gradio as gr
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import pipeline
+import pdfplumber
 
-# ----------------------------
-# CPU-friendly model
-# ----------------------------
-MODEL_NAME = "google/flan-t5-small"
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+# Load a summarization pipeline
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", device=-1)  # device=-1 for CPU
 
-# ----------------------------
-# Summarization function
-# ----------------------------
-def summarize_policy(pdf_text):
-    if not pdf_text.strip():
-        return "Please provide some text to summarize."
-    
-    # Prepend instruction for T5 model
-    input_text = f"summarize: {pdf_text}"
-    
-    inputs = tokenizer.encode(input_text, return_tensors="pt")
-    outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
-    summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    return summary
+def summarize_pdf(file):
+    text = ""
+    with pdfplumber.open(file.name) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
+    summary = summarizer(text, max_length=150, min_length=50, do_sample=False)
+    return summary[0]['summary_text']
 
-# ----------------------------
-# Gradio interface
-# ----------------------------
-iface = gr.Interface(
-    fn=summarize_policy,
-    inputs=gr.Textbox(lines=15, placeholder="Paste policy text here..."),
+demo = gr.Interface(
+    fn=summarize_pdf,
+    inputs=gr.File(file_types=[".pdf"]),
     outputs="text",
     title="Policy Summarizer",
-    description="Paste government policy text to get a short summary. CPU-friendly version."
+    description="Upload a PDF policy document and get a concise summary using CPU-only AI."
 )
 
 if __name__ == "__main__":
-    iface.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=8080)
 
