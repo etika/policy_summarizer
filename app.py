@@ -2,25 +2,41 @@ import gradio as gr
 from transformers import pipeline
 import pdfplumber
 
-# Load a summarization pipeline
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", device=-1)  # device=-1 for CPU
+# Use CPU-only pipeline
+summarizer = pipeline("summarization", device=-1)  # device=-1 ensures CPU
 
-def summarize_pdf(file):
+def summarize_policy(pdf_file):
     text = ""
-    with pdfplumber.open(file.name) as pdf:
+    # Extract text from PDF
+    with pdfplumber.open(pdf_file.name) as pdf:
         for page in pdf.pages:
             text += page.extract_text() + "\n"
-    summary = summarizer(text, max_length=150, min_length=50, do_sample=False)
-    return summary[0]['summary_text']
 
-demo = gr.Interface(
-    fn=summarize_pdf,
-    inputs=gr.File(file_types=[".pdf"]),
-    outputs="text",
+    if len(text.strip()) == 0:
+        return "No text found in PDF."
+
+    # HuggingFace summarizer has max token limits; chunk if needed
+    max_chunk = 1000
+    chunks = [text[i:i+max_chunk] for i in range(0, len(text), max_chunk)]
+    summary = ""
+    for chunk in chunks:
+        res = summarizer(chunk, max_length=150, min_length=30, do_sample=False)
+        summary += res[0]['summary_text'] + "\n"
+
+    return summary.strip()
+
+# Gradio interface
+iface = gr.Interface(
+    fn=summarize_policy,
+    inputs=gr.File(label="Upload Policy PDF"),
+    outputs=gr.Textbox(label="Policy Summary"),
     title="Policy Summarizer",
-    description="Upload a PDF policy document and get a concise summary using CPU-only AI."
+    description="Upload a government policy PDF, get a concise summary (CPU-friendly)."
 )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=8080)
+    # Render expects 0.0.0.0 and PORT environment variable
+    import os
+    port = int(os.environ.get("PORT", 7860))
+    iface.launch(server_name="0.0.0.0", server_port=port)
 

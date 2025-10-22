@@ -1,4 +1,5 @@
 gradio==4.44.0
-transformers==4.44.0
-pdfplumber
+torch==2.9.0           # CPU-only compatible
+transformers==4.44.0   # precompiled wheel, no Rust needed
+pdfplumber==0.10.0
 
